@@ -109,7 +109,7 @@ def process_file(path: Path):
         # 出力データ → まずビット順逆転、その後トラック化
         reversed_bytes = bytes(reverse_bits(b) for b in data)
         tracks = split_into_tracks(reversed_bytes)
-        output_hex = "\n".join(" ".join(f"{b:02X}" for b in t) for t in tracks)
+        output_hex = "\n".join("".join(f"{b:02X}" for b in t) for t in tracks)
 
     return input_type, input_display, output_hex
 
