@@ -9,4 +9,4 @@ card_data_exchanger.py:
 Convert the 207‑byte binary data into the track‑data format used for writing to an actual card.
 Track data is converted back into a 207‑byte binary data block.
 
-I want to say thank you Demul WIP developers 
+I want to say thank you for Demul WIP developers 
