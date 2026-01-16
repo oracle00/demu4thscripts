@@ -7,7 +7,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 # ------------------------------
-# WinAPI 定義
+# WinAPI Definitions
 # ------------------------------
 kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 
@@ -73,7 +73,7 @@ CloseHandle.argtypes = [wintypes.HANDLE]
 CloseHandle.restype = wintypes.BOOL
 
 # ------------------------------
-# 設定
+# Configuration
 # ------------------------------
 DEFAULT_DEMUL_CMD = r'D:\VO4\demul_251211\demul.exe -run=hikaru -rom=von4'
 DEFAULT_BASE_ADDR = 0x011BF880
@@ -86,7 +86,11 @@ FILE_PATTERN_OFFSET = 138
 
 UPDATE_INTERVAL_MS = 1000
 
-# ダークテーマ
+# Toggle Switch Configuration
+TOGGLE_ADDR = 0x2C5B796C
+TOGGLE_VALUE = 0x1E
+
+# Dark Theme Colors
 DARK_BG = "#1E1E1E"
 DARK_FG = "#E0E0E0"
 DARK_FRAME_BG = "#252525"
@@ -146,7 +150,8 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Demul Card Data Monitor")
-        self.geometry("900x400")
+        self.geometry("900x420")
+        self.resizable(False, False)
 
         self.proc = None
         self.h_process = None
@@ -157,6 +162,8 @@ class App(tk.Tk):
 
         self.blink_count = 0
         self.blink_on = False
+
+        self.toggle_enabled = False
 
         self.setup_style()
         self.create_widgets()
@@ -178,55 +185,55 @@ class App(tk.Tk):
     def create_widgets(self):
 
         # -------------------------
-        # Demul 起動コマンド設定
+        # Demul Launch Command Configuration
         # -------------------------
         cmd_frame = ttk.Frame(self)
         cmd_frame.pack(fill="x", padx=5, pady=5)
 
-        ttk.Label(cmd_frame, text="Demul 起動コマンド:").pack(side="left")
+        ttk.Label(cmd_frame, text="Demul Launch Command:").pack(side="left")
         self.demul_cmd_var = tk.StringVar(value=DEFAULT_DEMUL_CMD)
 
         entry = ttk.Entry(cmd_frame, textvariable=self.demul_cmd_var, width=80)
         entry.configure(foreground="black")
         entry.pack(side="left", padx=5)
 
-        ttk.Button(cmd_frame, text="保存", command=self.save_demul_cmd).pack(side="left", padx=5)
+        ttk.Button(cmd_frame, text="Save", command=self.save_demul_cmd).pack(side="left", padx=5)
 
         # -------------------------
-        # 上部操作パネル
+        # Top Control Panel
         # -------------------------
         top_frame = ttk.Frame(self)
         top_frame.pack(fill="x", padx=5, pady=5)
 
-        ttk.Button(top_frame, text="Demul 起動＆接続", command=self.start_demul).pack(side="left", padx=5)
-        ttk.Button(top_frame, text="Demul 終了", command=self.stop_demul).pack(side="left", padx=5)
+        ttk.Button(top_frame, text="Start Demul & Connect", command=self.start_demul).pack(side="left", padx=5)
+        ttk.Button(top_frame, text="Stop Demul", command=self.stop_demul).pack(side="left", padx=5)
 
-        ttk.Label(top_frame, text="ベースアドレス:").pack(side="left")
+        ttk.Label(top_frame, text="Base Address:").pack(side="left")
         self.base_addr_var = tk.StringVar(value=f"0x{DEFAULT_BASE_ADDR:08X}")
         ttk.Label(top_frame, textvariable=self.base_addr_var).pack(side="left", padx=5)
 
         self.use_scan_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(top_frame, text="パターンスキャンで取得", variable=self.use_scan_var).pack(side="left", padx=10)
+        ttk.Checkbutton(top_frame, text="Get via Pattern Scan", variable=self.use_scan_var).pack(side="left", padx=10)
 
-        self.btn_scan = ttk.Button(top_frame, text="パターンスキャン実行", command=self.run_scan)
+        self.btn_scan = ttk.Button(top_frame, text="Run Pattern Scan", command=self.run_scan)
         self.btn_scan.pack(side="left", padx=5)
 
-        self.status_var = tk.StringVar(value="ステータス: 未接続")
+        self.status_var = tk.StringVar(value="Status: Not Connected")
         ttk.Label(top_frame, textvariable=self.status_var).pack(side="left", padx=10)
 
         # -------------------------
-        # 中段レイアウト
+        # Middle Layout
         # -------------------------
         middle_frame = ttk.Frame(self)
-        middle_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        middle_frame.pack(fill="both", expand=True, padx=2, pady=2)
 
-        # 左：現在のカードデータ
-        current_frame = ttk.LabelFrame(middle_frame, text="現在のカードデータ（メモリ）")
-        current_frame.pack(side="left", fill="both", expand=True, padx=5, pady=5)
+        # Left: Current Card Data
+        current_frame = ttk.LabelFrame(middle_frame, text="Current Card Data (Memory)")
+        current_frame.pack(side="left", fill="both", expand=True, padx=2, pady=2)
 
-        self.min_current = tk.Frame(current_frame, width=300, height=210, bg=DARK_FRAME_BG)
+        self.min_current = tk.Frame(current_frame, width=360, height=180, bg=DARK_FRAME_BG)
         self.min_current.pack_propagate(False)
-        self.min_current.pack(fill="none")
+        self.min_current.pack(fill="none", padx=2, pady=2)
 
         self.txt_current = tk.Text(
             self.min_current, wrap="word",
@@ -236,26 +243,26 @@ class App(tk.Tk):
         self.txt_current.pack(fill="both", expand=True)
 
         bottom_current = ttk.Frame(current_frame)
-        bottom_current.pack(fill="x")
+        bottom_current.pack(fill="x", padx=2, pady=2)
 
-        self.last_update_var = tk.StringVar(value="更新: まだ取得していません")
-        ttk.Label(bottom_current, textvariable=self.last_update_var).pack(side="left", padx=5)
+        self.last_update_var = tk.StringVar(value="Update: Not retrieved yet")
+        ttk.Label(bottom_current, textvariable=self.last_update_var).pack(side="left", padx=3)
 
-        self.btn_save_current = ttk.Button(bottom_current, text="現在のカードデータを保存",
+        self.btn_save_current = ttk.Button(bottom_current, text="Save Current Card Data",
                                            command=self.save_current_data, state="disabled")
-        self.btn_save_current.pack(side="right", padx=5)
+        self.btn_save_current.pack(side="right", padx=3)
 
         # -------------------------
-        # 右：上書きカードデータ（赤枠）
+        # Right: Overwrite Card Data (Red Frame)
         # -------------------------
         overwrite_frame = ttk.LabelFrame(
-            middle_frame, text="上書きするカードデータ", style="RedFrame.TLabelframe"
+            middle_frame, text="Overwrite Card Data", style="RedFrame.TLabelframe"
         )
-        overwrite_frame.pack(side="left", fill="both", expand=True, padx=5, pady=5)
+        overwrite_frame.pack(side="left", fill="both", expand=True, padx=2, pady=2)
 
-        self.min_overwrite = tk.Frame(overwrite_frame, width=300, height=210, bg=DARK_FRAME_BG)
+        self.min_overwrite = tk.Frame(overwrite_frame, width=360, height=180, bg=DARK_FRAME_BG)
         self.min_overwrite.pack_propagate(False)
-        self.min_overwrite.pack(fill="none", padx=5)
+        self.min_overwrite.pack(fill="none", padx=2, pady=2)
 
         self.txt_overwrite = tk.Text(
             self.min_overwrite, wrap="word",
@@ -263,54 +270,72 @@ class App(tk.Tk):
             borderwidth=1, relief="solid", width=1, height=1
         )
         self.txt_overwrite.pack(fill="both", expand=True)
+        self.txt_overwrite.bind("<KeyRelease>", self.validate_overwrite_text)
 
         bottom_overwrite = ttk.Frame(overwrite_frame)
-        bottom_overwrite.pack(fill="x")
+        bottom_overwrite.pack(fill="x", padx=2, pady=2)
 
-        self.overwrite_status_var = tk.StringVar(value="ファイルを選択してください")
+        self.overwrite_status_var = tk.StringVar(value="Select file")
         ttk.Label(bottom_overwrite, textvariable=self.overwrite_status_var).pack(side="left", padx=5)
 
-        self.btn_overwrite = ttk.Button(bottom_overwrite, text="メモリを上書き",
+        self.btn_overwrite = ttk.Button(bottom_overwrite, text="Overwrite Memory",
                                         command=self.do_overwrite, state="disabled")
         self.btn_overwrite.pack(side="right", padx=5)
 
         # -------------------------
-        # 入力ファイルパス表示（ボタンは右側）
+        # Input File Path Display (Button on Right)
         # -------------------------
         path_frame = ttk.Frame(self)
         path_frame.pack(fill="x", padx=5, pady=(0, 5))
 
-        ttk.Label(path_frame, text="入力ファイル:").pack(side="left")
+        ttk.Label(path_frame, text="Input File:").pack(side="left")
 
         self.input_path_var = tk.StringVar(value="")
         entry_path = ttk.Entry(path_frame, textvariable=self.input_path_var, width=100)
         entry_path.configure(foreground="black")
         entry_path.pack(side="left", padx=5, fill="x", expand=True)
 
-        self.btn_open_file = ttk.Button(path_frame, text="上書き用ファイルを開く",
+        self.btn_open_file = ttk.Button(path_frame, text="Open Overwrite File",
                                         command=self.open_overwrite_file)
         self.btn_open_file.pack(side="right", padx=5)
 
-    # --------------------------
-    # Demul 起動コマンド保存
-    # --------------------------
-    def save_demul_cmd(self):
-        messagebox.showinfo("保存完了", "Demul 起動コマンドを更新しました。")
+        # -------------------------
+        # Toggle Switch Panel
+        # -------------------------
+        toggle_frame = ttk.LabelFrame(self, text="Card Value Fix")
+        toggle_frame.pack(fill="x", padx=5, pady=5)
+
+        self.toggle_var = tk.BooleanVar(value=False)
+        self.toggle_check = ttk.Checkbutton(
+            toggle_frame, text="Enable Restore Card Uses",
+            variable=self.toggle_var,
+            command=self.toggle_fixed_value
+        )
+        self.toggle_check.pack(side="left", padx=10)
+
+        self.toggle_status_var = tk.StringVar(value="Disabled")
+        ttk.Label(toggle_frame, textvariable=self.toggle_status_var).pack(side="left", padx=10)
 
     # --------------------------
-    # Demul 起動
+    # Save Demul Launch Command
+    # --------------------------
+    def save_demul_cmd(self):
+        messagebox.showinfo("Save Complete", "Demul launch command updated.")
+
+    # --------------------------
+    # Start Demul
     # --------------------------
     def start_demul(self):
         cmd = self.demul_cmd_var.get()
 
         if self.proc is not None and self.proc.poll() is None:
-            messagebox.showinfo("情報", "すでに Demul に接続しています。")
+            messagebox.showinfo("Information", "Already connected to Demul.")
             return
 
         try:
             self.proc = subprocess.Popen(cmd)
         except Exception as e:
-            messagebox.showerror("エラー", f"Demul の起動に失敗しました:\n{e}")
+            messagebox.showerror("Error", f"Failed to start Demul:\n{e}")
             return
 
         pid = self.proc.pid
@@ -318,20 +343,23 @@ class App(tk.Tk):
         h_process = OpenProcess(access, False, pid)
 
         if not h_process:
-            messagebox.showerror("エラー", "OpenProcess に失敗しました")
+            messagebox.showerror("Error", "OpenProcess failed")
             self.proc = None
             return
 
         self.h_process = h_process
-        self.status_var.set(f"ステータス: Demul 起動 (PID={pid})")
+        self.status_var.set(f"Status: Demul Started (PID={pid})")
         self.monitoring = True
         self.after(UPDATE_INTERVAL_MS, self.update_card_data_loop)
 
     # --------------------------
-    # Demul 終了
+    # Stop Demul
     # --------------------------
     def stop_demul(self):
         self.monitoring = False
+        self.toggle_enabled = False
+        self.toggle_var.set(False)
+        self.toggle_status_var.set("Disabled")
 
         if self.h_process:
             CloseHandle(self.h_process)
@@ -344,20 +372,20 @@ class App(tk.Tk):
                 pass
 
         self.proc = None
-        self.status_var.set("ステータス: Demul 終了")
-        self.last_update_var.set("更新: 監視停止")
+        self.status_var.set("Status: Demul Stopped")
+        self.last_update_var.set("Update: Monitoring Stopped")
         self.base_addr = DEFAULT_BASE_ADDR
         self.base_addr_var.set(f"0x{DEFAULT_BASE_ADDR:08X}")
 
     # --------------------------
-    # パターンスキャン
+    # Pattern Scan
     # --------------------------
     def run_scan(self):
         if not self.h_process:
-            messagebox.showwarning("警告", "Demul に接続してからスキャンしてください。")
+            messagebox.showwarning("Warning", "Connect to Demul before scanning.")
             return
 
-        self.status_var.set("ステータス: パターンスキャン中...")
+        self.status_var.set("Status: Pattern Scanning...")
         self.btn_scan.config(state="disabled")
 
         def worker():
@@ -367,9 +395,9 @@ class App(tk.Tk):
                 if base:
                     self.base_addr = base
                     self.base_addr_var.set(f"0x{base:08X}")
-                    self.status_var.set(f"ステータス: スキャン完了 (0x{base:08X})")
+                    self.status_var.set(f"Status: Scan Complete (0x{base:08X})")
                 else:
-                    self.status_var.set("ステータス: パターンが見つかりませんでした")
+                    self.status_var.set("Status: Pattern not found")
 
                 self.btn_scan.config(state="normal")
 
@@ -378,15 +406,28 @@ class App(tk.Tk):
         threading.Thread(target=worker, daemon=True).start()
 
     # --------------------------
-    # メモリ監視
+    # Toggle Value Fix
+    # --------------------------
+    def toggle_fixed_value(self):
+        self.toggle_enabled = self.toggle_var.get()
+        if self.toggle_enabled:
+            self.toggle_status_var.set("Enabled")
+        else:
+            self.toggle_status_var.set("Disabled")
+
+    # --------------------------
+    # Memory Monitoring
     # --------------------------
     def update_card_data_loop(self):
         if not self.monitoring or not self.h_process:
             return
 
         if self.proc is None or self.proc.poll() is not None:
-            self.status_var.set("ステータス: Demul プロセス終了")
+            self.status_var.set("Status: Demul Process Ended")
             self.monitoring = False
+            self.toggle_enabled = False
+            self.toggle_var.set(False)
+            self.toggle_status_var.set("Disabled")
             return
 
         data = read_process_memory(self.h_process, self.base_addr, CARD_SIZE)
@@ -396,16 +437,23 @@ class App(tk.Tk):
                 self.last_card_data = data
                 self.txt_current.delete("1.0", "end")
                 self.txt_current.insert("1.0", bytes_to_hex_str(data))
-                self.last_update_var.set(f"更新: {time.strftime('%H:%M:%S')} に変更を検出")
+                self.last_update_var.set(f"Update: Change detected at {time.strftime('%H:%M:%S')}")
                 self.btn_save_current.config(state="normal")
                 self.start_frame_blink()
         else:
-            self.last_update_var.set("更新: 読み取りに失敗")
+            self.last_update_var.set("Update: Read failed")
+
+        # Write memory fixed value
+        if self.toggle_enabled:
+            try:
+                write_process_memory(self.h_process, TOGGLE_ADDR, bytes([TOGGLE_VALUE]))
+            except Exception:
+                pass
 
         self.after(UPDATE_INTERVAL_MS, self.update_card_data_loop)
 
     # --------------------------
-    # フレーム点滅
+    # Frame Blinking
     # --------------------------
     def start_frame_blink(self):
         self.blink_count = 0
@@ -434,7 +482,7 @@ class App(tk.Tk):
         self.txt_current.configure(bg=DARK_FRAME_BG, fg=DARK_FG, insertbackground=DARK_FG)
 
     # --------------------------
-    # 現在データ保存
+    # Save Current Data
     # --------------------------
     def save_current_data(self):
         if not self.last_card_data:
@@ -450,11 +498,49 @@ class App(tk.Tk):
         with open(path, "wb") as f:
             f.write(self.last_card_data)
 
-        messagebox.showinfo("保存完了", f"保存しました:\n{path}")
+        messagebox.showinfo("Save Complete", f"Saved:\n{path}")
 
 
     # --------------------------
-    # 上書き用ファイルを開く
+    # Validate Overwrite Text (Paste Support)
+    # --------------------------
+    def validate_overwrite_text(self, event=None):
+        text_content = self.txt_overwrite.get("1.0", "end").strip()
+        
+        if not text_content:
+            self.overwrite_data = None
+            self.overwrite_status_var.set("Select file")
+            self.btn_overwrite.config(state="disabled")
+            return
+
+        try:
+            # Convert hex text to byte array
+            hex_values = text_content.split()
+            data = bytes(int(h, 16) for h in hex_values)
+        except (ValueError, TypeError):
+            self.overwrite_data = None
+            self.overwrite_status_var.set("Invalid: Not valid hexadecimal format")
+            self.btn_overwrite.config(state="disabled")
+            return
+
+        if len(data) != CARD_SIZE:
+            self.overwrite_data = None
+            self.overwrite_status_var.set(f"Invalid: Size is not {CARD_SIZE} bytes")
+            self.btn_overwrite.config(state="disabled")
+            return
+
+        if data[FILE_PATTERN_OFFSET:FILE_PATTERN_OFFSET + PATTERN_LEN] != PATTERN:
+            self.overwrite_data = None
+            self.overwrite_status_var.set("Invalid: Pattern not found at byte 138")
+            self.btn_overwrite.config(state="disabled")
+            return
+
+        self.overwrite_data = data
+        self.overwrite_status_var.set("Valid card data")
+        self.btn_overwrite.config(state="normal")
+
+    # --------------------------
+    # Open Overwrite File
     # --------------------------
     def open_overwrite_file(self):
         path = filedialog.askopenfilename(
@@ -467,7 +553,7 @@ class App(tk.Tk):
             with open(path, "rb") as f:
                 data = f.read()
         except Exception:
-            self.overwrite_status_var.set("ファイルを開けませんでした")
+            self.overwrite_status_var.set("Could not open file")
             self.input_path_var.set(path)
             self.btn_overwrite.config(state="disabled")
             return
@@ -475,12 +561,12 @@ class App(tk.Tk):
         self.input_path_var.set(path)
 
         if len(data) != CARD_SIZE:
-            self.overwrite_status_var.set("無効: サイズが 207 バイトではありません")
+            self.overwrite_status_var.set(f"Invalid: Size is not {CARD_SIZE} bytes")
             self.btn_overwrite.config(state="disabled")
             return
 
         if data[FILE_PATTERN_OFFSET:FILE_PATTERN_OFFSET + PATTERN_LEN] != PATTERN:
-            self.overwrite_status_var.set("無効: 138 バイト後にパターンがありません")
+            self.overwrite_status_var.set("Invalid: Pattern not found at byte 138")
             self.btn_overwrite.config(state="disabled")
             return
 
@@ -488,32 +574,32 @@ class App(tk.Tk):
         self.txt_overwrite.delete("1.0", "end")
         self.txt_overwrite.insert("1.0", bytes_to_hex_str(data))
 
-        self.overwrite_status_var.set("有効なカードデータ")
+        self.overwrite_status_var.set("Valid card data")
         self.btn_overwrite.config(state="normal")
 
     # --------------------------
-    # メモリ上書き
+    # Overwrite Memory
     # --------------------------
     def do_overwrite(self):
         if not self.h_process or self.proc is None or self.proc.poll() is not None:
-            messagebox.showwarning("警告", "Demul に接続されていません。")
+            messagebox.showwarning("Warning", "Not connected to Demul.")
             return
 
         if not self.overwrite_data or len(self.overwrite_data) != CARD_SIZE:
-            messagebox.showwarning("警告", "有効な上書きデータがありません。")
+            messagebox.showwarning("Warning", "No valid overwrite data.")
             return
 
-        if not messagebox.askyesno("確認", "メモリ上のカードデータを上書きします。よろしいですか？"):
+        if not messagebox.askyesno("Confirm", "Overwrite card data in memory. Continue?"):
             return
 
         try:
             write_process_memory(self.h_process, self.base_addr, self.overwrite_data)
-            messagebox.showinfo("完了", "メモリの上書きが完了しました。")
+            messagebox.showinfo("Complete", "Memory overwrite completed.")
         except Exception as e:
-            messagebox.showerror("エラー", f"メモリの上書きに失敗しました:\n{e}")
+            messagebox.showerror("Error", f"Memory overwrite failed:\n{e}")
 
     # --------------------------
-    # ウィンドウ終了処理
+    # Window Close Handler
     # --------------------------
     def on_close(self):
         self.stop_demul()
